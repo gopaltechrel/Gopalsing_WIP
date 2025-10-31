@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Work-in-Progress (WIP) App</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root{--accent:#0d6efd;--muted:#6c757d}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#f8fafc}
+    .card-anim{transition:transform .18s ease,box-shadow .18s ease}
+    .card-anim:hover{transform:translateY(-6px);box-shadow:0 14px 30px rgba(13,110,253,.06)}
+    .fade-in{animation:fadeIn .45s ease both}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    .status-idea{background:#eef2ff;color:#0d6efd}
+    .status-progress{background:#fff4e6;color:#d97706}
+    .status-testing{background:#eefcf0;color:#198754}
+    .status-blocked{background:#fff0f0;color:#dc3545}
+    .status-done{background:#e9f7ef;color:#0f5132}
+    .progress-sm{height:12px;border-radius:8px}
+    .small-muted{font-size:.85rem;color:var(--muted)}
+    .kanban-column{min-height:260px}
+    .drop-over{outline:3px dashed rgba(13,110,253,.12)}
+    .pill{display:inline-block;padding:.25rem .6rem;border-radius:999px;background:#eef2ff;color:var(--accent);font-weight:600}
+    .sidebar{max-height:78vh;overflow:auto}
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-white bg-white shadow-sm mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold" href="#">WIP — Work In Progress</a>
+      <div class="d-flex gap-2 ms-auto">
+        <button class="btn btn-sm btn-outline-secondary" id="exportBtn">Export</button>
+        <button class="btn btn-sm btn-primary" id="newItemBtn">New WIP Item</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="row">
+      <aside class="col-lg-3 sidebar mb-3">
+        <div class="card shadow-sm mb-3 card-anim">
+          <div class="card-body">
+            <h6 class="mb-2">Quick filters</h6>
+            <div class="d-flex gap-2 flex-wrap mb-2">
+              <button class="btn btn-sm btn-outline-primary filter" data-filter="all">All</button>
+              <button class="btn btn-sm btn-outline-secondary filter" data-filter="mine">Assigned to me</button>
+              <button class="btn btn-sm btn-outline-secondary filter" data-filter="blocked">Blocked</button>
+              <button class="btn btn-sm btn-outline-secondary filter" data-filter="no-assignee">Unassigned</button>
+            </div>
+            <hr>
+            <h6 class="mb-1">Views</h6>
+            <div class="d-grid">
+              <button id="viewBoard" class="btn btn-sm btn-outline-primary">Kanban Board</button>
+              <button id="viewList" class="btn btn-sm btn-outline-secondary">List View</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm card-anim">
+          <div class="card-body">
+            <h6>Stats</h6>
+            <div class="small-muted mb-2">Total items</div>
+            <div class="h4" id="statTotal">0</div>
+            <div class="small-muted mt-3 mb-1">Progress overview</div>
+            <div class="progress progress-sm mb-2"><div id="overviewProgress" class="progress-bar" style="width:0%"></div></div>
+            <div class="small-muted">Avg completion across items</div>
+            <hr>
+            <div class="small-muted">Data stored locally. Use export/import to backup.</div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="col-lg-9">
+        <div id="boardArea">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Kanban Board</h4>
+            <div class="small-muted">Drag cards between columns to change status</div>
+          </div>
+          <div class="row g-3" id="kanbanRow">
+            <!-- columns rendered here -->
+          </div>
+        </div>
+
+        <div id="listArea" style="display:none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">List View</h4>
+            <div class="small-muted">Manage items in a compact list</div>
+          </div>
+          <div class="card shadow-sm"><div class="card-body p-2"><table class="table table-sm table-hover mb-0"><thead><tr><th>Title</th><th>Assignee</th><th>Progress</th><th>Status</th><th>Actions</th></tr></thead><tbody id="listTable"></tbody></table></div></div>
+        </div>
+
+        <hr class="my-4">
+        <div class="card shadow-sm"><div class="card-body"><h6>Activity Feed</h6><div id="activityFeed" style="max-height:220px;overflow:auto" class="small-muted mt-2"></div></div></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Item Modal -->
+  <div class="modal fade" id="itemModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+    <form id="itemForm"><div class="modal-header"><h5 class="modal-title">New WIP Item</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body row g-2">
+        <input type="hidden" id="itemId">
+        <div class="col-md-8"><input id="itemTitle" class="form-control" placeholder="Title (short)" required></div>
+        <div class="col-md-4"><select id="itemAssignee" class="form-select"><option value="">Unassigned</option></select></div>
+        <div class="col-md-4 mt-2"><select id="itemPriority" class="form-select"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+        <div class="col-md-4 mt-2"><input id="itemDue" type="date" class="form-control"></div>
+        <div class="col-md-4 mt-2"><input id="itemProgress" type="number" class="form-control" min="0" max="100" value="0"></div>
+        <div class="col-12 mt-2"><textarea id="itemDesc" class="form-control" placeholder="Description / notes"></textarea></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary" type="submit">Save</button><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div></form>
+  </div></div></div>
+
+  <!-- Confirm Modal -->
+  <div class="modal fade" id="confirmModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-body" id="confirmBody"></div><div class="modal-footer"><button class="btn btn-danger" id="confirmYes">Yes</button><button class="btn btn-secondary" data-bs-dismiss="modal">No</button></div></div></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Work-in-Progress App (client-only)
+    const STORAGE_KEY = 'wip_app_v1';
+    const STATUSES = ['Idea','In Progress','Testing','Blocked','Done'];
+    let state = { users: ['You'], items: [], activity: [] };
+
+    function uid(){ return Math.random().toString(36).slice(2,9); }
+    function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    function load(){ const raw = localStorage.getItem(STORAGE_KEY); state = raw?JSON.parse(raw):{users:['You'],items:[],activity:[]}; }
+
+    // UI refs
+    const kanbanRow = document.getElementById('kanbanRow');
+    const listTable = document.getElementById('listTable');
+    const itemAssignee = document.getElementById('itemAssignee');
+
+    // render functions
+    function renderUsers(){ itemAssignee.innerHTML = '<option value="">Unassigned</option>'; state.users.forEach(u=>{ const o = document.createElement('option'); o.value = u; o.text = u; itemAssignee.appendChild(o); }); }
+
+    function calcOverviewProgress(){ if(state.items.length===0) return 0; const sum = state.items.reduce((s,i)=>s + (i.progress||0),0); return Math.round(sum / state.items.length); }
+
+    function renderStats(){ document.getElementById('statTotal').textContent = state.items.length; document.getElementById('overviewProgress').style.width = calcOverviewProgress() + '%'; }
+
+    function renderBoard(filter='all'){
+      kanbanRow.innerHTML='';
+      for(const status of STATUSES){
+        const col = document.createElement('div'); col.className='col-12 col-md-6 col-lg-2';
+        const card = document.createElement('div'); card.className='card kanban-column shadow-sm';
+        const body = document.createElement('div'); body.className='card-body p-2';
+        body.innerHTML = `<h6>${status} <small class="text-muted">(${state.items.filter(i=>i.status===status).length})</small></h6><div class="dropzone" data-status="${status}" style="min-height:160px;padding-top:8px"></div>`;
+        card.appendChild(body); col.appendChild(card); kanbanRow.appendChild(col);
+      }
+
+      // populate items
+      const filterVal = document.querySelector('.filter.active')?.getAttribute('data-filter') || 'all';
+      for(const item of state.items.slice().sort((a,b)=>b.updated - a.updated)){
+        if(filterVal==='mine' && item.assignee !== 'You') continue;
+        if(filterVal==='blocked' && item.status !== 'Blocked') continue;
+        if(filterVal==='no-assignee' && item.assignee) continue;
+        const el = document.createElement('div'); el.className='card mb-2 card-anim'; el.draggable = true; el.dataset.id = item.id;
+        const pbar = `<div class="progress progress-sm mb-2"><div class="progress-bar" role="progressbar" style="width:${item.progress||0}%">${item.progress||0}%</div></div>`;
+        el.innerHTML = `<div class="card-body p-2"><div class="d-flex justify-content-between"><div><strong>${escapeHtml(item.title)}</strong><div class="small-muted">${escapeHtml(item.assignee||'Unassigned')} • ${escapeHtml(item.priority||'medium')}</div></div><div><span class="pill">${escapeHtml(item.status||'Idea')}</span></div></div>${pbar}<div class="small-muted truncate">${escapeHtml(item.description||'')}</div><div class="mt-2 d-flex gap-2"><button class="btn btn-sm btn-outline-primary" data-edit="${item.id}">Edit</button><button class="btn btn-sm btn-outline-danger ms-auto" data-del="${item.id}">Delete</button></div></div>`;
+        // attach events
+        el.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', item.id); });
+        const zone = document.querySelector(`.dropzone[data-status="${item.status}"]`);
+        if(zone) zone.appendChild(el);
+      }
+
+      // wire dropzones
+      document.querySelectorAll('.dropzone').forEach(z=>{
+        z.addEventListener('dragover', e=>{ e.preventDefault(); z.classList.add('drop-over'); });
+        z.addEventListener('dragleave', e=>{ z.classList.remove('drop-over'); });
+        z.addEventListener('drop', e=>{ e.preventDefault(); z.classList.remove('drop-over'); const id = e.dataTransfer.getData('text/plain'); const item = state.items.find(x=>x.id===id); if(item){ item.status = z.dataset.status; item.updated = Date.now(); state.activity.unshift({msg:`Moved: ${item.title} → ${item.status}`,at:Date.now()}); save(); renderBoard(); renderStats(); renderActivity(); } });
+      });
+    }
+
+    function renderList(){ listTable.innerHTML=''; for(const i of state.items.slice().sort((a,b)=>b.updated - a.updated)){ const tr = document.createElement('tr'); tr.innerHTML = `<td>${escapeHtml(i.title)}</td><td>${escapeHtml(i.assignee||'Unassigned')}</td><td><div class="progress progress-sm"><div class="progress-bar" style="width:${i.progress||0}%"></div></div></td><td>${escapeHtml(i.status)}</td><td><button class="btn btn-sm btn-outline-primary" data-edit="${i.id}">Edit</button> <button class="btn btn-sm btn-outline-danger" data-del="${i.id}">Delete</button></td>`; listTable.appendChild(tr); }
+    }
+
+    function renderActivity(){ const feed = document.getElementById('activityFeed'); feed.innerHTML=''; state.activity.slice(0,80).forEach(a=>{ const d = new Date(a.at); const div = document.createElement('div'); div.className='mb-2'; div.innerHTML = `<div><strong>${escapeHtml(a.msg)}</strong></div><div class="small-muted">${d.toLocaleString()}</div>`; feed.appendChild(div); }); }
+
+    // helpers
+    function escapeHtml(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // events
+    document.getElementById('newItemBtn').addEventListener('click', ()=>{ document.getElementById('itemForm').reset(); document.getElementById('itemId').value=''; document.querySelector('#itemModal .modal-title').textContent = 'New WIP Item'; var md = new bootstrap.Modal(document.getElementById('itemModal')); md.show(); });
+
+    document.getElementById('itemForm').addEventListener('submit', (e)=>{ e.preventDefault(); const id = document.getElementById('itemId').value; const title = document.getElementById('itemTitle').value.trim(); const assignee = document.getElementById('itemAssignee').value || ''; const priority = document.getElementById('itemPriority').value; const due = document.getElementById('itemDue').value||null; const progress = parseInt(document.getElementById('itemProgress').value,10) || 0; const desc = document.getElementById('itemDesc').value.trim(); if(!title) return alert('Title required'); if(id){ const it = state.items.find(x=>x.id===id); Object.assign(it,{title,assignee,priority,due,progress,description:desc,updated:Date.now()}); state.activity.unshift({msg:`Updated: ${title}`,at:Date.now()}); } else { const it = { id: uid(), title, assignee, priority, due, progress, description:desc, status:'Idea', created:Date.now(), updated:Date.now() }; state.items.push(it); state.activity.unshift({msg:`Created: ${title}`,at:Date.now()}); }
+      save(); renderBoard(); renderList(); renderStats(); renderActivity(); bootstrap.Modal.getInstance(document.getElementById('itemModal')).hide(); });
+
+    // delegated click handlers for edit/delete
+    document.addEventListener('click',(e)=>{
+      const edit = e.target.getAttribute('data-edit'); const del = e.target.getAttribute('data-del'); if(edit){ const it = state.items.find(x=>x.id===edit); if(!it) return; document.getElementById('itemId').value = it.id; document.getElementById('itemTitle').value = it.title; document.getElementById('itemAssignee').value = it.assignee || ''; document.getElementById('itemPriority').value = it.priority || 'medium'; document.getElementById('itemDue').value = it.due || ''; document.getElementById('itemProgress').value = it.progress || 0; document.getElementById('itemDesc').value = it.description || ''; document.querySelector('#itemModal .modal-title').textContent = 'Edit WIP Item'; var md = new bootstrap.Modal(document.getElementById('itemModal')); md.show(); }
+      if(del){ if(!confirm('Delete item permanently?')) return; const it = state.items.find(x=>x.id===del); state.items = state.items.filter(x=>x.id!==del); state.activity.unshift({msg:`Deleted: ${it.title}`,at:Date.now()}); save(); renderBoard(); renderList(); renderStats(); renderActivity(); }
+    });
+
+    // filters
+    document.querySelectorAll('.filter').forEach(b=> b.addEventListener('click', ()=>{ document.querySelectorAll('.filter').forEach(x=>x.classList.remove('active')); b.classList.add('active'); renderBoard(); }));
+
+    // view switches
+    document.getElementById('viewBoard').addEventListener('click', ()=>{ document.getElementById('boardArea').style.display='block'; document.getElementById('listArea').style.display='none'; });
+    document.getElementById('viewList').addEventListener('click', ()=>{ document.getElementById('boardArea').style.display='none'; document.getElementById('listArea').style.display='block'; });
+
+    // export
+    document.getElementById('exportBtn').addEventListener('click', ()=>{ const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'wip-data.json'; a.click(); URL.revokeObjectURL(url); });
+
+    // confirm helper
+    function showConfirm(msg, yes){ document.getElementById('confirmBody').textContent = msg; var md = new bootstrap.Modal(document.getElementById('confirmModal')); md.show(); document.getElementById('confirmYes').onclick = function(){ md.hide(); yes(); }; }
+
+    // init
+    load(); if(state.users.length===0) state.users = ['You']; renderUsers(); if(state.items.length===0){ // demo seed
+      state.items = [ { id: uid(), title: 'Prototype login flow', assignee: 'You', priority: 'high', due: null, progress: 30, description: 'Design + API', status: 'In Progress', created: Date.now(), updated: Date.now() }, { id: uid(), title: 'Research theming', assignee: '', priority: 'low', due: null, progress: 0, description: 'Look into CSS variables', status: 'Idea', created: Date.now(), updated: Date.now() }, { id: uid(), title: 'E2E tests', assignee: 'QA', priority: 'medium', due: null, progress: 0, description: 'Write Cypress tests', status: 'Testing', created: Date.now(), updated: Date.now() } ]; state.activity.unshift({msg:'Demo items loaded',at:Date.now()}); save(); }
+    renderBoard(); renderList(); renderStats(); renderActivity();
+  </script>
+</body>
+</html>
